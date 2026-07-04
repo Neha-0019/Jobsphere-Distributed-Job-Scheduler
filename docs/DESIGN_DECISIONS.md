@@ -1,123 +1,146 @@
-# JobSphere: Distributed Job Scheduler
+# 📑 JobSphere: Design Decisions & Trade-Offs
 
-## Design Decisions & Trade-offs
-
-This document explains the key architectural choices behind JobSphere's job 
-scheduling and execution engine, and the trade-offs accepted for each.
+This document details the architectural choices, database schema design, concurrency mechanisms, SRE trade-offs, and UI implementation details behind JobSphere's job scheduling and execution engine.
 
 ---
 
-## 1. Database-native claiming (`SELECT FOR UPDATE SKIP LOCKED`) vs. external message broker
+## 1. Core Scheduling & Execution Engine
 
-**Decision:** Jobs are claimed atomically using row-level locking directly on the 
-`jobs` table, rather than routing job dispatch through an external broker like 
-Redis, RabbitMQ, or SQS.
+### 1.1 Database-Native Claiming (`SELECT FOR UPDATE SKIP LOCKED`) vs. External Message Broker
+
+**Decision:** Jobs are claimed atomically using row-level locking directly on the `jobs` table, rather than routing job dispatch through an external broker like Redis, RabbitMQ, or SQS.
 
 **Why:**
-- Keeps job state, execution history, and claiming logic transactionally 
-  consistent in one system — a job's status can never disagree with what's in 
-  the queue, because there is only one source of truth.
-- Removes an entire class of dual-write bugs (e.g. job marked claimed in Redis 
-  but the DB write fails, or vice versa).
-- Simpler to deploy and reason about for a project this size — one database, 
-  no additional infrastructure to run, monitor, or fail over.
+*   **Single Source of Truth:** Keeps job state, execution history, and claiming logic transactionally consistent in one database. A job's status can never disagree with what's in the queue.
+*   **Prevents Dual-Write Bugs:** Removes an entire class of dual-write bugs (e.g., job marked claimed in Redis but the database write fails).
+*   **Infrastructure Simplicity:** Simplifies deployment and maintenance. No additional message queue cluster is required to run, monitor, or failover.
 
 **Trade-off accepted:**
-- Lower theoretical claim throughput than a purpose-built broker, since every 
-  claim is a database transaction rather than an in-memory queue pop.
-- No built-in pub/sub fan-out — broadcasting to many consumers is more natural 
-  in Redis/RabbitMQ.
-- At high worker counts, row-level lock contention on hot queues could become 
-  a bottleneck. This is an acceptable limit for the scale this project targets; 
-  a production system with very high job volume would likely graduate to a 
-  broker-backed design once this becomes measurable.
+*   **Throughput Limits:** Lower theoretical claim throughput than a purpose-built in-memory broker, since every claim involves a disk/transaction write.
+*   **Connection Scaling:** At high worker counts, row-level lock contention on hot queues could become a bottleneck. This is an acceptable scale limit for JobSphere's target workloads. A production enterprise system would graduate to a broker-backed design once connection contention becomes measurable.
 
 ---
 
-## 2. Polling workers vs. push-based dispatch
+### 1.2 Polling Workers vs. Push-Based Dispatch
 
-**Decision:** Workers poll for available jobs on an interval rather than having 
-jobs pushed to them by a central dispatcher.
+**Decision:** Workers poll for available jobs on a set interval rather than having jobs pushed to them by a central coordinator process.
 
 **Why:**
-- No dispatcher process needed — workers are stateless and interchangeable; 
-  adding or removing workers requires no coordination.
-- Naturally load-balances: any idle worker picks up the next available job, 
-  rather than requiring the dispatcher to track worker load.
+*   **Stateless Scaling:** No central dispatcher is needed. Workers are stateless and interchangeable; adding or removing workers requires zero coordination.
+*   **Dynamic Load Balancing:** Naturally load-balances itself. Any idle worker picks up the next available job, rather than requiring a central dispatcher to track worker CPU/memory loads.
 
 **Trade-off accepted:**
-- Job pickup latency is bounded by the polling interval rather than being 
-  instant. For this system's use case (background job processing, not 
-  sub-second real-time dispatch), this latency is acceptable.
-- Constant polling generates some baseline DB load even when queues are empty, 
-  which a push model would avoid.
+*   **Pickup Latency:** Job pickup latency is bounded by the polling interval rather than being instantaneous. For background task execution, this slight latency is fully acceptable.
+*   **Baseline DB Load:** Constant polling generates a minor baseline database query load even when queues are empty.
 
 ---
 
-## 3. Heartbeat timeout value (30 seconds)
+### 1.3 Concurrency Control: Atomic Claiming Details
 
-**Decision:** A worker is considered dead, and its in-flight job is recovered, 
-if no heartbeat is received for 30 seconds.
+**The Race Condition Problem:** In a distributed environment with multiple workers polling a shared database, two workers might run a `SELECT` statement and obtain the same candidate job. If they both proceed to update its status to `RUNNING`, the job will execute twice.
+
+**The Solution: `SKIP LOCKED`**
+JobSphere uses PostgreSQL's row-level lock modifier `FOR UPDATE SKIP LOCKED` inside a transaction:
+1.  `FOR UPDATE` locks the candidate rows returned by the subquery, preventing other transactions from writing or locking them.
+2.  `SKIP LOCKED` instructs concurrent transactions that try to lock the same rows to skip them and immediately look for the next available rows.
+This ensures **exactly-once execution** semantics with zero polling lock contention.
+
+---
+
+## 2. Database Schema Design & Indexing
+
+### 2.1 Relational Schema Normalization (3NF)
+
+The database schema is normalized to the **Third Normal Form (3NF)** to avoid update anomalies and data redundancy:
+*   `User` credentials are decoupled from `Organization` structures to allow multi-tenant setups.
+*   `Queue` properties (like `priority` and `max_concurrency`) are isolated from individual `Jobs`.
+*   Job attempt history is logged in a separate child table (`JobExecution`) rather than overwriting fields on `Job`, enabling full retry logs and metrics tracking.
+
+### 2.2 Performance Indexing Strategy
+
+To support highly frequent polling under high workloads, the following indexes are implemented:
+1.  **Composite index on `jobs(status, run_at)`:** Polling workers query this composite key constantly to fetch eligible jobs. Indexing it reduces the query overhead from $O(N)$ full table scans to $O(\log N)$ b-tree seeks.
+2.  **Foreign Key indexes (`jobs.queue_id`, `job_executions.job_id`):** Facilitates fast joins for fetching dashboard metrics and execution histories.
+3.  **Heartbeat index on `workers.last_heartbeat`:** Speeds up recovery scans identifying stale workers.
+
+---
+
+## 3. Reliability, Concurrency & Fault Tolerance
+
+### 3.1 Heartbeat Timeout & Recovery of Stale Workers
+
+**Decision:** A worker is considered dead, and its in-flight jobs are recovered, if no heartbeat is received for 30 seconds.
 
 **Why 30 seconds specifically:**
-- Short enough that a genuinely crashed worker's job doesn't sit abandoned for 
-  long before recovery.
-- Long enough to absorb normal transient delays (GC pauses, brief network 
-  blips, momentary DB slowness) without falsely declaring a healthy worker dead.
+*   Short enough that a genuinely crashed worker's job doesn't sit abandoned for long before recovery.
+*   Long enough to absorb normal transient delays (GC pauses, brief network blips, database latency) without falsely declaring a healthy worker dead.
 
-**Trade-off:**
-- **Too short** a timeout risks false-positive recovery: a slow-but-alive 
-  worker gets its job reclaimed and potentially re-run by another worker while 
-  it's still working — a correctness risk if the job isn't idempotent.
-- **Too long** a timeout means genuine crashes take longer to recover from, 
-  increasing job latency during real failures.
-- 30 seconds was chosen as a reasonable middle ground for this project's 
-  expected job durations; a production system would likely make this 
-  configurable per-queue based on typical job runtime.
-
----
-
-## 4. Idempotency: at-least-once execution, not exactly-once
-
-**Decision:** JobSphere provides **at-least-once** execution semantics, not 
-exactly-once. An optional `idempotency_key` can be attached to a job at 
-creation time; if present, the worker checks for a prior `COMPLETED` execution 
-with the same key before re-running side-effecting work, and skips duplicate 
-execution if found.
-
-**Why this design, not true exactly-once:**
-- Exactly-once execution across a crash (e.g. worker dies after doing the 
-  side-effecting work but before the status commit) is a distributed systems 
-  problem that generally requires the job's side effects themselves to be 
-  transactional with the status update — not feasible in general for 
-  arbitrary job payloads.
-- Instead, the system makes the **honest, achievable guarantee**: jobs may be 
-  executed more than once in rare crash scenarios, but callers who provide an 
-  idempotency key get duplicate-execution protection at the application layer.
+**Recovery Mechanism:**
+*   Workers update `workers.last_heartbeat` every 5 seconds.
+*   Active workers periodically scan for instances whose last heartbeat is older than 30 seconds.
+*   If a stale worker is found, its status is marked `INACTIVE`, and its active/claimed jobs are automatically rescheduled to `QUEUED` (incrementing the retry count and logging the recovery reason) to be picked up by healthy workers.
 
 **Trade-off accepted:**
-- Jobs without an idempotency key have no duplicate-execution protection — 
-  this is documented as the caller's responsibility for non-idempotent work 
-  (e.g. sending an email, charging a payment).
-- This mirrors how most real-world job systems (e.g. Sidekiq, Celery, SQS) 
-  actually behave: at-least-once by default, exactly-once only with explicit 
-  application-level support.
+*   **False Positives:** Too short a timeout risks false-positive recovery: a slow-but-alive worker gets its job reclaimed and potentially re-run by another worker while it's still working. 30 seconds was chosen as a reasonable middle ground for our expected job runtimes.
 
 ---
 
-## 5. Rate limiting: in-memory token bucket, single-process scope
+### 3.2 Queue-Level Concurrency Limit Checking
 
-**Decision:** Job-submission endpoints are protected by a token-bucket rate 
-limiter, implemented as an in-memory, thread-safe counter per project.
+To enforce the `max_concurrency` limit of each queue:
+1.  The worker polls and counts the number of jobs currently in `CLAIMED` or `RUNNING` status grouped by `queue_id`.
+2.  Any queue whose active job count meets or exceeds its configured `max_concurrency` is excluded from the active polling query.
+3.  This dynamically balances workers across eligible queues and prevents resource starvation.
+
+---
+
+### 3.3 Idempotency: At-Least-Once Execution & Protection Keys
+
+**Decision:** JobSphere provides **at-least-once** execution semantics, not exactly-once. An optional `idempotency_key` can be attached to a job at creation time; if present, the worker checks for a prior `COMPLETED` execution with the same key before re-running side-effecting work, and skips duplicate execution if found.
+
+**Why this design, not true exactly-once:**
+*   Exactly-once execution across a crash (e.g., worker dies after doing the side-effecting work but before committing status) is a distributed systems problem that generally requires the job's side effects themselves to be transactional with the status update.
+*   Instead, the system makes an honest, achievable guarantee: jobs may be executed more than once in rare crash scenarios, but callers who provide an idempotency key get duplicate-execution protection at the application layer.
+
+---
+
+### 3.4 Configurable Retry Backoffs & Dead Letter Queue (DLQ)
+
+**Configurable Retry Backoffs:**
+Failed executions calculate the next run time using one of three policies:
+*   **Fixed:** $\text{interval}$
+*   **Linear:** $\text{interval} \times \text{attempt}$
+*   **Exponential:** $\text{interval} \times 2^{\text{attempt} - 1}$
+This prevents overloaded downstream webhooks/services from being overwhelmed by failing retries (thundering herd problem).
+
+**Dead Letter Queue (DLQ):**
+When a job's attempts exceed `max_retries`, it transitions to `FAILED_DLQ` status, and its metadata is copied to the `dead_letter_queue` audit log. This isolates permanent failures, preventing them from clogging active worker loops.
+
+---
+
+## 4. Security & API Protection
+
+### 4.1 Token-Bucket Rate Limiting (Single-Process Scope)
+
+**Decision:** Job-submission endpoints are protected by a token-bucket rate limiter, implemented as an in-memory, thread-safe counter per project.
 
 **Trade-off / known limitation:**
-- This limiter is **not distributed-safe** — if the backend runs as multiple 
-  processes or instances behind a load balancer, each instance enforces its 
-  own independent limit, so the effective rate limit is 
-  `configured_limit × number_of_instances`.
-- For a single-instance deployment (as in this project), this is correct and 
-  sufficient.
-- A production multi-instance deployment would need a shared store (Redis 
-  `INCR` with TTL, or a Redis-backed token bucket) so all instances enforce 
-  one consistent limit. This is called out here as a deliberate scope 
-  boundary, not an oversight.
+*   This limiter is **not distributed-safe**. If the backend runs as multiple processes or instances behind a load balancer, each instance enforces its own independent limit, so the effective rate limit is `configured_limit × number_of_instances`.
+*   For a single-instance deployment (as in this project), this is correct and sufficient. A production multi-instance deployment would need a shared store (like Redis) to enforce one consistent limit.
+
+---
+
+## 5. UI Architecture & Real-Time Sync
+
+### 5.1 Telemetry Display & Charting
+
+To represent real-time observability telemetry, the dashboard includes Recharts area, line, and bar chart components. 
+*   **High-Visibility SRE styling:** Ticks, legend items, and values are styled in monospace `JetBrains Mono` and `Space Grotesk` fonts with `tabular-nums` formatting to mirror telemetry tools like Datadog/Grafana.
+*   **Desaturated statuses:** Success runs use `#5fb87a` green, while failed/error paths use a bright red `#e15456` to ensure immediately visible indicators.
+
+### 5.2 Real-Time Updates: HTML5 WebSockets & Flask-Sock
+
+*   Instead of periodic HTTP polling loops, the dashboard initiates a native `WebSocket` connection to the backend `/ws` route on load.
+*   The backend manages active socket connections in memory.
+*   Whenever a job state changes (e.g. `CLAIMED`, `RUNNING`, `COMPLETED`, `FAILED`), or a dependency unlocks a child job, the backend broadcasts a JSON payload.
+*   Receiving this signal triggers an instant visual sync on all open client dashboards, achieving real-time responsiveness with zero polling overhead.

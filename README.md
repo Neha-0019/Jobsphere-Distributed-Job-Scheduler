@@ -122,7 +122,8 @@ Create, edit, pause, and configure queues and custom retry policies dynamically.
 
 ### Job Explorer
 Inspect execution states, batching transactions, individual attempt durations, stack traces, and job logs.
-![Jobs](screenshots/jobs.png)
+![Jobs List](screenshots/jobs.png)
+![Job Dispatch Form](screenshots/jobs_dispatch.png)
 
 ### Worker Management
 View status, host mappings, and active worker daemon threads polling and claiming tasks.

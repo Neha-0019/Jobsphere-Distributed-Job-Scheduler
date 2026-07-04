@@ -24,7 +24,7 @@ export default function Sidebar() {
       <div className="flex flex-col">
         {/* Header/Logo */}
         <div className="flex items-center space-x-2 px-6 py-5 border-b border-[#2c323d]">
-          <div className="p-1.5 bg-[#2563EB]/10 text-[#2563EB] rounded">
+          <div className="p-1.5 bg-[#8b7fc4]/10 text-[#8b7fc4] rounded">
             <Activity className="h-5 w-5" />
           </div>
           <div>
@@ -54,7 +54,7 @@ export default function Sidebar() {
               className={({ isActive }) =>
                 `flex items-center space-x-3 px-3 py-2 text-xs font-semibold rounded transition-colors ${
                   isActive
-                    ? 'bg-[#2563EB] text-[#F9FAFB]'
+                    ? 'bg-[#8b7fc4] text-[#0d0d0d]'
                     : 'text-[#9CA3AF] hover:text-[#F9FAFB] hover:bg-[#2D3748]'
                 }`
               }

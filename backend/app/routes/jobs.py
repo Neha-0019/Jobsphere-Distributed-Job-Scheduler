@@ -6,6 +6,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from app.database import db
 from app.models import User, Project, Queue, Job, JobExecution, JobLog, RecurringJob, DeadLetterQueueEntry
 from app.utils.cron import get_next_cron_time
+from app.utils.rate_limit import rate_limit_project
 
 jobs_bp = Blueprint('jobs', __name__)
 
@@ -18,6 +19,7 @@ def get_user_project(user_id):
 
 @jobs_bp.route('/', methods=['POST'])
 @jwt_required()
+@rate_limit_project()
 def create_job():
     user_id = get_jwt_identity()
     project = get_user_project(user_id)
@@ -31,10 +33,21 @@ def create_job():
     delay_seconds = data.get('delay_seconds')
     run_at_str = data.get('run_at') # ISO string
     depends_on = data.get('depends_on', []) # List of parent job IDs
+    idempotency_key = data.get('idempotency_key')
 
     # Validation
     if not queue_id or not payload:
         return jsonify({'success': False, 'message': 'queue_id and payload are required'}), 400
+
+    # Idempotency check
+    if idempotency_key:
+        existing_job = Job.query.filter_by(idempotency_key=idempotency_key).first()
+        if existing_job:
+            return jsonify({
+                'success': True,
+                'job': existing_job.to_dict(),
+                'message': 'Duplicate job creation request. Returned existing job.'
+            }), 200
 
     # Ensure queue belongs to the project
     queue = Queue.query.filter_by(id=queue_id, project_id=project.id).first()
@@ -85,7 +98,8 @@ def create_job():
             payload=payload_str,
             priority=int(priority),
             run_at=run_at,
-            max_retries=queue.retry_policy.max_retries if queue.retry_policy else 3
+            max_retries=queue.retry_policy.max_retries if queue.retry_policy else 3,
+            idempotency_key=idempotency_key
         )
         if parents:
             job.parents.extend(parents)
@@ -105,6 +119,7 @@ def create_job():
 
 @jobs_bp.route('/batch', methods=['POST'])
 @jwt_required()
+@rate_limit_project()
 def create_batch_jobs():
     user_id = get_jwt_identity()
     project = get_user_project(user_id)
@@ -175,6 +190,7 @@ def get_recurring_jobs():
 
 @jobs_bp.route('/recurring', methods=['POST'])
 @jwt_required()
+@rate_limit_project()
 def create_recurring_job():
     user_id = get_jwt_identity()
     project = get_user_project(user_id)

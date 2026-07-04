@@ -88,24 +88,37 @@ export default function Dashboard() {
     { title: 'Running', value: runningCount, sub: 'Active Executions' },
     { title: 'Completed', value: completedCount, sub: 'Processed successfully' },
     { title: 'Failed', value: failedCount, sub: 'Exhausted & DLQ' },
-    { title: 'Active Workers', value: activeWorkersCount, sub: 'Registered processes' },
   ];
 
   return (
     <div className="space-y-6">
       {/* Title */}
       <div>
-        <h2 className="text-2xl font-bold text-[#F9FAFB]">Operations Overview</h2>
+        <h2 className="text-2xl font-bold text-[#F9FAFB] tracking-tight">OPERATIONS OVERVIEW</h2>
         <p className="text-xs text-[#9CA3AF]">Real-time queue analytics and engine telemetry</p>
       </div>
 
       {/* KPI Cards Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4">
+        {/* Hero Card: Active Workers (spans 2 columns on medium/large screens) */}
+        <div className="bg-[#1F2937] border border-[#374151] border-l-4 border-l-[#8b7fc4] p-5 rounded flex flex-col justify-between md:col-span-2 shadow-lg">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-[#F9FAFB]">Active Workers</span>
+            <Cpu className="h-5 w-5 text-[#8b7fc4]" />
+          </div>
+          <div className="flex items-baseline space-x-2 mt-3">
+            <span className="text-4xl font-extrabold text-[#F9FAFB] font-mono tracking-tight">{activeWorkersCount}</span>
+            <span className="text-[10px] text-[#7a9b6e] font-mono font-bold uppercase tracking-wider animate-pulse">online</span>
+          </div>
+          <span className="text-[10px] text-[#9CA3AF] mt-2">Active daemon threads polling and claiming tasks</span>
+        </div>
+
+        {/* Other 5 standard cards with subtle dividers */}
         {kpis.map((kpi, idx) => (
-          <div key={idx} className="bg-[#1F2937] border border-[#374151] p-4 rounded flex flex-col justify-between">
-            <span className="text-[11px] font-semibold text-[#9CA3AF] uppercase tracking-wider">{kpi.title}</span>
+          <div key={idx} className="bg-[#1F2937]/40 border-b border-[#374151] p-4 rounded flex flex-col justify-between">
+            <span className="text-xs font-medium text-[#9CA3AF]">{kpi.title}</span>
             <div className="flex items-baseline space-x-2 mt-2">
-              <span className="text-2xl font-bold text-[#F9FAFB]">{kpi.value}</span>
+              <span className="text-2xl font-bold text-[#F9FAFB] font-mono tracking-tight">{kpi.value}</span>
             </div>
             <span className="text-[9px] text-[#9CA3AF] mt-1">{kpi.sub}</span>
           </div>
@@ -125,12 +138,12 @@ export default function Dashboard() {
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#16A34A" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#16A34A" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#5fb87a" stopOpacity={0.25}/>
+                    <stop offset="95%" stopColor="#5fb87a" stopOpacity={0}/>
                   </linearGradient>
                   <linearGradient id="colorFailed" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#DC2626" stopOpacity={0.2}/>
-                    <stop offset="95%" stopColor="#DC2626" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#e15456" stopOpacity={0.25}/>
+                    <stop offset="95%" stopColor="#e15456" stopOpacity={0}/>
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -141,8 +154,8 @@ export default function Dashboard() {
                   labelStyle={{ fontWeight: 'bold' }}
                 />
                 <Legend wrapperStyle={{ paddingTop: 10 }} />
-                <Area type="monotone" dataKey="completed" name="Success" stroke="#16A34A" strokeWidth={2} fillOpacity={1} fill="url(#colorCompleted)" />
-                <Area type="monotone" dataKey="failed" name="Failed" stroke="#DC2626" strokeWidth={2} fillOpacity={1} fill="url(#colorFailed)" />
+                <Area type="monotone" dataKey="completed" name="Success" stroke="#5fb87a" strokeWidth={2.5} fillOpacity={1} fill="url(#colorCompleted)" />
+                <Area type="monotone" dataKey="failed" name="Failed" stroke="#e15456" strokeWidth={2.5} fillOpacity={1} fill="url(#colorFailed)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -164,7 +177,7 @@ export default function Dashboard() {
                   contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F9FAFB' }}
                 />
                 <Legend wrapperStyle={{ paddingTop: 10 }} />
-                <Bar dataKey="total" name="Total Executions" fill="#2563EB" radius={[2, 2, 0, 0]} />
+                <Bar dataKey="total" name="Total Executions" fill="#d9a94f" radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -175,18 +188,19 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-xs font-semibold text-[#F9FAFB] uppercase tracking-wider">Engine Performance Metrics</h3>
-              <p className="text-[10px] text-[#9CA3AF]">Average process duration: {(avg_execution_time_ms / 1000).toFixed(2)}s | Success Rate: {success_rate_percent}%</p>
+              <p className="text-[10px] text-[#9CA3AF]">
+                Average process duration: <span className="font-mono">{(avg_execution_time_ms / 1000).toFixed(2)}s</span> | Success Rate: <span className="font-mono">{success_rate_percent}%</span>
+              </p>
             </div>
-            <div className="flex items-center space-x-2 text-[10px] font-semibold font-mono bg-[#111827] px-2.5 py-1 border border-[#374151] rounded">
-              <span className="h-2 w-2 rounded-full bg-[#16A34A] inline-block"></span>
-              <span className="text-[#F9FAFB]">ALL SYSTEMS OPERATIONAL</span>
+            <div className="text-[11px] text-[#5fb87a] font-mono">
+              ✓ All systems operational
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 bg-[#111827] border border-[#374151] rounded">
-              <span className="text-[10px] text-[#9CA3AF] uppercase font-semibold block mb-2">Average Latency</span>
-              <div className="text-2xl font-bold text-[#F9FAFB]">
+            <div className="p-4 bg-[#111827]/40 border-b border-[#374151] rounded">
+              <span className="text-xs font-medium text-[#9CA3AF] block mb-2">Average Latency</span>
+              <div className="text-2xl font-bold text-[#F9FAFB] font-mono tracking-tight">
                 {avg_execution_time_ms >= 1000 
                   ? `${(avg_execution_time_ms / 1000).toFixed(2)}s` 
                   : `${avg_execution_time_ms.toFixed(0)}ms`}
@@ -194,9 +208,9 @@ export default function Dashboard() {
               <span className="text-[9px] text-[#9CA3AF] block mt-1">Average execution loop latency across all active queues</span>
             </div>
             
-            <div className="p-4 bg-[#111827] border border-[#374151] rounded">
-              <span className="text-[10px] text-[#9CA3AF] uppercase font-semibold block mb-2">Success Rate</span>
-              <div className="text-2xl font-bold text-[#16A34A]">{success_rate_percent}%</div>
+            <div className="p-4 bg-[#111827]/40 border-b border-[#374151] rounded">
+              <span className="text-xs font-medium text-[#9CA3AF] block mb-2">Success Rate</span>
+              <div className="text-2xl font-bold text-[#5fb87a] font-mono tracking-tight">{success_rate_percent}%</div>
               <span className="text-[9px] text-[#9CA3AF] block mt-1">Percentage of executions ending in completed status vs DLQ</span>
             </div>
           </div>

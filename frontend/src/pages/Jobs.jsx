@@ -32,6 +32,7 @@ export default function Jobs() {
   const [subType, setSubType] = useState('GENERIC');
   const [subDelay, setSubDelay] = useState('');
   const [subDependsOn, setSubDependsOn] = useState('');
+  const [subIdempotencyKey, setSubIdempotencyKey] = useState('');
   
   // Payload States
   const [genericDuration, setGenericDuration] = useState(2.0);
@@ -157,12 +158,14 @@ export default function Jobs() {
         priority: parseInt(subPriority),
         payload: payload,
         delay_seconds: subDelay ? Number(subDelay) : null,
-        depends_on: dependsOnArray
+        depends_on: dependsOnArray,
+        idempotency_key: subIdempotencyKey || null
       });
       if (resp.data.success) {
         setSuccess(`Job successfully enqueued. ID: ${resp.data.job.id}`);
         setSubDelay('');
         setSubDependsOn('');
+        setSubIdempotencyKey('');
         setViewMode('explorer');
       }
     } catch (err) {
@@ -640,6 +643,17 @@ export default function Jobs() {
                   placeholder="Parent Job UUIDs (comma-separated, e.g. uuid-1, uuid-2)"
                   value={subDependsOn}
                   onChange={e => setSubDependsOn(e.target.value)}
+                  className="w-full px-3 py-2 bg-[#111827] border border-[#374151] rounded text-xs text-[#F9FAFB] focus:outline-none focus:border-[#2563EB] font-mono"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-[#9CA3AF] mb-1">Idempotency Key (optional)</label>
+                <input 
+                  type="text"
+                  placeholder="e.g. payment-tx-999"
+                  value={subIdempotencyKey}
+                  onChange={e => setSubIdempotencyKey(e.target.value)}
                   className="w-full px-3 py-2 bg-[#111827] border border-[#374151] rounded text-xs text-[#F9FAFB] focus:outline-none focus:border-[#2563EB] font-mono"
                 />
               </div>

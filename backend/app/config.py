@@ -20,3 +20,6 @@ class Config:
     MAX_WORKER_CONCURRENCY = int(os.environ.get('MAX_WORKER_CONCURRENCY', '10'))
     POLL_INTERVAL = float(os.environ.get('POLL_INTERVAL', '1.0'))
     HEARTBEAT_INTERVAL = float(os.environ.get('HEARTBEAT_INTERVAL', '5.0'))
+    MAX_RETRY_DELAY_CAP = int(os.environ.get('MAX_RETRY_DELAY_CAP', '3600'))
+    RATE_LIMIT_BUCKET_CAPACITY = int(os.environ.get('RATE_LIMIT_BUCKET_CAPACITY', '60'))
+    RATE_LIMIT_REFILL_RATE = float(os.environ.get('RATE_LIMIT_REFILL_RATE', '1.0'))

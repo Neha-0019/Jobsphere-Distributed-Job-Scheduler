@@ -9,26 +9,26 @@ export default function Header() {
     switch (connectionStatus) {
       case 'CONNECTED':
         return (
-          <span className="flex items-center space-x-1 px-2 py-0.5 bg-[#16A34A]/10 border border-[#16A34A]/30 text-[#16A34A] rounded text-[10px] font-bold font-mono">
-            <Radio className="h-3 w-3 animate-pulse" />
-            <span>CONNECTED</span>
-          </span>
+          <div className="flex items-center space-x-1.5 text-[#9CA3AF]">
+            <span className="h-2 w-2 rounded-full bg-[#5fb87a] inline-block animate-pulse"></span>
+            <span className="font-mono text-[10px] uppercase tracking-wider">Connected</span>
+          </div>
         );
       case 'CONNECTING':
         return (
-          <span className="flex items-center space-x-1 px-2 py-0.5 bg-[#D97706]/10 border border-[#D97706]/30 text-[#D97706] rounded text-[10px] font-bold font-mono">
-            <RefreshCw className="h-3 w-3 animate-spin" />
-            <span>CONNECTING</span>
-          </span>
+          <div className="flex items-center space-x-1.5 text-[#9CA3AF]">
+            <span className="h-2 w-2 rounded-full bg-[#c9a15c] inline-block animate-pulse"></span>
+            <span className="font-mono text-[10px] uppercase tracking-wider">Connecting</span>
+          </div>
         );
       case 'DISCONNECTED':
       case 'ERROR':
       default:
         return (
-          <span className="flex items-center space-x-1 px-2 py-0.5 bg-[#DC2626]/10 border border-[#DC2626]/30 text-[#DC2626] rounded text-[10px] font-bold font-mono">
-            <Radio className="h-3 w-3" />
-            <span>OFFLINE</span>
-          </span>
+          <div className="flex items-center space-x-1.5 text-[#9CA3AF]">
+            <span className="h-2 w-2 rounded-full bg-[#a05a5a] inline-block"></span>
+            <span className="font-mono text-[10px] uppercase tracking-wider">Offline</span>
+          </div>
         );
     }
   };

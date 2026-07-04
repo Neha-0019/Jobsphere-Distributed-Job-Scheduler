@@ -2,7 +2,7 @@ from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import datetime, timedelta
 from app.database import db
-from app.models import User, Project, Queue, Job, Worker, JobExecution
+from app.models import User, Project, Queue, Job, Worker, JobExecution, QueueDepthSnapshot
 
 metrics_bp = Blueprint('metrics', __name__)
 
@@ -120,4 +120,89 @@ def get_throughput_chart_data():
     return jsonify({
         'success': True,
         'data': chart_data
+    }), 200
+
+@metrics_bp.route('/latency', methods=['GET'])
+@jwt_required()
+def get_latency_percentiles():
+    """
+    Computes and returns the P50, P95, and P99 job execution latencies
+    from completed job execution records.
+    """
+    user_id = get_jwt_identity()
+    project = get_user_project(user_id)
+    if not project:
+        return jsonify({'success': False, 'message': 'Project not found'}), 404
+
+    # Fetch duration of all completed executions in this project
+    durations = [
+        d[0] for d in db.session.query(JobExecution.duration_ms)
+        .join(Job).join(Queue)
+        .filter(
+            Queue.project_id == project.id,
+            JobExecution.status == 'COMPLETED',
+            JobExecution.duration_ms.isnot(None)
+        )
+        .order_by(JobExecution.duration_ms.asc()).all()
+    ]
+
+    n = len(durations)
+    if n == 0:
+        return jsonify({
+            'success': True,
+            'p50': 0.0,
+            'p95': 0.0,
+            'p99': 0.0,
+            'count': 0
+        }), 200
+
+    def get_percentile(p):
+        idx = int(n * p)
+        if idx >= n:
+            idx = n - 1
+        return float(durations[idx])
+
+    return jsonify({
+        'success': True,
+        'p50': get_percentile(0.50),
+        'p95': get_percentile(0.95),
+        'p99': get_percentile(0.99),
+        'count': n
+    }), 200
+
+@metrics_bp.route('/queue-depth', methods=['GET'])
+@jwt_required()
+def get_queue_depth_over_time():
+    """
+    Returns time-series queue depth metrics (sampled count of QUEUED jobs)
+    for active queues in the project, looking back 6 hours.
+    """
+    user_id = get_jwt_identity()
+    project = get_user_project(user_id)
+    if not project:
+        return jsonify({'success': False, 'message': 'Project not found'}), 404
+
+    now = datetime.utcnow()
+    six_hours_ago = now - timedelta(hours=6)
+
+    snapshots = db.session.query(
+        Queue.name,
+        QueueDepthSnapshot.depth,
+        QueueDepthSnapshot.timestamp
+    ).join(Queue).filter(
+        Queue.project_id == project.id,
+        QueueDepthSnapshot.timestamp >= six_hours_ago
+    ).order_by(QueueDepthSnapshot.timestamp.asc()).all()
+
+    data = []
+    for queue_name, depth, timestamp in snapshots:
+        data.append({
+            'queue_name': queue_name,
+            'depth': depth,
+            'timestamp': timestamp.isoformat() + 'Z'
+        })
+
+    return jsonify({
+        'success': True,
+        'data': data
     }), 200

@@ -1,39 +1,158 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   body {
-    @apply bg-[#181b1f] text-[#F9FAFB] antialiased;
-    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+    @apply bg-[#141414] text-[#F9FAFB] antialiased;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif !important;
   }
 }
 
-/* Custom Scrollbar for SRE dense logs */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* Global overrides for typography & muted-violet theme */
+body {
+  background-color: #141414 !important;
+  background-image: radial-gradient(circle, #212121 0%, #0a0a0a 100%) !important;
+  background-attachment: fixed;
+  font-family: 'Inter', system-ui, sans-serif !important;
 }
 
+h1, h2, h3, h4, h5, h6,
+button,
+nav a,
+aside a,
+.font-semibold,
+.font-bold {
+  font-family: 'Space Grotesk', sans-serif !important;
+}
+
+.font-mono,
+.recharts-text,
+.recharts-cartesian-axis-tick,
+.recharts-cartesian-axis-tick-value,
+.recharts-cartesian-axis-tick tspan,
+.recharts-legend-item-text,
+.recharts-tooltip-label,
+.recharts-tooltip-item-value,
+.recharts-tooltip-item-name {
+  font-family: 'JetBrains Mono', monospace !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+
+.bg-\[\#181b1f\] {
+  background-color: #141414 !important;
+}
+
+.bg-\[\#111217\] {
+  background-color: #0d0d0d !important;
+}
+
+.bg-\[\#1F2937\] {
+  background-color: #1c1c1c !important;
+}
+
+.bg-\[\#1F2937\]\/40 {
+  background-color: rgba(28, 28, 28, 0.4) !important;
+}
+
+.bg-\[\#1F2937\]\/50 {
+  background-color: rgba(28, 28, 28, 0.5) !important;
+}
+
+.border-\[\#374151\] {
+  border-color: #2f2f2f !important;
+}
+
+.border-b-\[\#374151\] {
+  border-bottom-color: #2f2f2f !important;
+}
+
+.border-t-\[\#374151\] {
+  border-top-color: #2f2f2f !important;
+}
+
+.border-r-\[\#374151\] {
+  border-right-color: #2f2f2f !important;
+}
+
+.border-l-\[\#374151\] {
+  border-left-color: #2f2f2f !important;
+}
+
+.bg-\[\#111827\] {
+  background-color: #121212 !important;
+}
+
+.bg-\[\#111827\]\/40 {
+  background-color: rgba(18, 18, 18, 0.4) !important;
+}
+
+.border-\[\#2c323d\] {
+  border-color: #181818 !important;
+}
+
+.hover\:bg-\[\#2D3748\]:hover {
+  background-color: #222222 !important;
+}
+
+/* Primary accent: muted violet #8b7fc4 overrides */
+.bg-\[\#2563EB\] {
+  background-color: #8b7fc4 !important;
+  color: #0d0d0d !important;
+}
+
+.text-\[\#2563EB\] {
+  color: #8b7fc4 !important;
+}
+
+.border-\[\#2563EB\] {
+  border-color: #8b7fc4 !important;
+}
+
+.hover\:bg-\[\#2563EB\]\/90:hover {
+  background-color: #7368a8 !important;
+  color: #0d0d0d !important;
+}
+
+.focus\:border-\[\#2563EB\]:focus {
+  border-color: #8b7fc4 !important;
+}
+
+.bg-\[\#2563EB\]\/10 {
+  background-color: rgba(139, 127, 196, 0.1) !important;
+  color: #8b7fc4 !important;
+}
+
+.border-\[\#2563EB\]\/20 {
+  border-color: rgba(139, 127, 196, 0.2) !important;
+}
+
+.border-\[\#2563EB\]\/30 {
+  border-color: rgba(139, 127, 196, 0.3) !important;
+}
+
+/* Scrollbars */
 ::-webkit-scrollbar-track {
-  background: #181b1f;
+  background: #141414 !important;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #374151;
-  border-radius: 2px;
+  background: #2f2f2f !important;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #2D3748;
+  background: #3e3e3e !important;
 }
 
-/* Enterprise table alternate rows */
-tbody tr:nth-child(even) {
-  background-color: rgba(31, 41, 55, 0.3);
-}
-
-/* Sticky Headers shadow effect */
+/* Table header shadow */
 thead th {
-  box-shadow: 0 1px 0 0 #374151;
+  box-shadow: 0 1px 0 0 #2f2f2f !important;
+}
+
+/* Alternate row colors */
+tbody tr:nth-child(even) {
+  background-color: rgba(28, 28, 28, 0.3) !important;
 }

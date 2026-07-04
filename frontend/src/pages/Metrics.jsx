@@ -8,14 +8,27 @@ import { useApp } from '../contexts/AppContext';
 export default function Metrics() {
   const { api, refreshTrigger } = useApp();
   const [throughput, setThroughput] = useState([]);
+  const [latency, setLatency] = useState({ p50: 0, p95: 0, p99: 0 });
+  const [queueDepth, setQueueDepth] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const fetchMetrics = async () => {
     try {
-      const tpResp = await api.get('/metrics/throughput');
+      const [tpResp, latResp, qdResp] = await Promise.all([
+        api.get('/metrics/throughput'),
+        api.get('/metrics/latency'),
+        api.get('/metrics/queue-depth')
+      ]);
+      
       if (tpResp.data.success) {
         setThroughput(tpResp.data.data || []);
+      }
+      if (latResp.data.success) {
+        setLatency(latResp.data || { p50: 0, p95: 0, p99: 0 });
+      }
+      if (qdResp.data.success) {
+        setQueueDepth(qdResp.data.data || []);
       }
       setError('');
     } catch (err) {
@@ -56,6 +69,29 @@ export default function Metrics() {
     total: d.completed + d.failed
   }));
 
+  // Format queue depth snapshots grouped by timestamp
+  const formatQueueDepthData = () => {
+    const timeBuckets = {};
+    queueDepth.forEach(snapshot => {
+      const timeLabel = formatTimeLabel(snapshot.timestamp);
+      if (!timeBuckets[timeLabel]) {
+        timeBuckets[timeLabel] = { time: timeLabel };
+      }
+      timeBuckets[timeLabel][snapshot.queue_name] = snapshot.depth;
+    });
+    return Object.values(timeBuckets);
+  };
+  
+  const queueDepthChartData = formatQueueDepthData();
+  const uniqueQueueNames = Array.from(new Set(queueDepth.map(s => s.queue_name)));
+  const LINE_COLORS = ['#5fb87a', '#8b7fc4', '#d9a94f', '#e15456', '#3da8e8', '#e85da3'];
+  
+  const latencyChartData = [
+    { name: 'P50 (Median)', latency: latency.p50, fill: '#5fb87a' },
+    { name: 'P95 (Tail)', latency: latency.p95, fill: '#d9a94f' },
+    { name: 'P99 (Worst Case)', latency: latency.p99, fill: '#e15456' }
+  ];
+
   return (
     <div className="space-y-6">
       {/* Title */}
@@ -82,13 +118,23 @@ export default function Metrics() {
           <div className="h-64 text-xs">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorCompletedMetrics" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#5fb87a" stopOpacity={0.25}/>
+                    <stop offset="95%" stopColor="#5fb87a" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorFailedMetrics" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#e15456" stopOpacity={0.25}/>
+                    <stop offset="95%" stopColor="#e15456" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis dataKey="time" stroke="#9CA3AF" tickLine={false} />
                 <YAxis stroke="#9CA3AF" tickLine={false} />
                 <Tooltip contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F9FAFB' }} />
                 <Legend wrapperStyle={{ paddingTop: 10 }} />
-                <Area type="monotone" dataKey="completed" name="Success" stroke="#16A34A" fill="#16A34A" fillOpacity={0.1} />
-                <Area type="monotone" dataKey="failed" name="Failed" stroke="#DC2626" fill="#DC2626" fillOpacity={0.1} />
+                <Area type="monotone" dataKey="completed" name="Success" stroke="#5fb87a" strokeWidth={2.5} fillOpacity={1} fill="url(#colorCompletedMetrics)" />
+                <Area type="monotone" dataKey="failed" name="Failed" stroke="#e15456" strokeWidth={2.5} fillOpacity={1} fill="url(#colorFailedMetrics)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -108,7 +154,7 @@ export default function Metrics() {
                 <YAxis stroke="#9CA3AF" tickLine={false} />
                 <Tooltip contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F9FAFB' }} />
                 <Legend wrapperStyle={{ paddingTop: 10 }} />
-                <Line type="monotone" dataKey="total" name="Total Dispatch Volume" stroke="#2563EB" strokeWidth={2} activeDot={{ r: 4 }} />
+                <Line type="monotone" dataKey="total" name="Total Dispatch Volume" stroke="#d9a94f" strokeWidth={2.5} activeDot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -128,8 +174,61 @@ export default function Metrics() {
                 <YAxis stroke="#9CA3AF" tickLine={false} />
                 <Tooltip contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F9FAFB' }} />
                 <Legend wrapperStyle={{ paddingTop: 10 }} />
-                <Bar dataKey="completed" name="Success runs" fill="#16A34A" stackId="a" />
-                <Bar dataKey="failed" name="Failed runs" fill="#DC2626" stackId="a" />
+                <Bar dataKey="completed" name="Success runs" fill="#5fb87a" stackId="a" />
+                <Bar dataKey="failed" name="Failed runs" fill="#e15456" stackId="a" />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Chart 4: Queue Depth over Time */}
+        <div className="bg-[#1F2937] border border-[#374151] p-4 rounded">
+          <div className="mb-4">
+            <h3 className="text-xs font-semibold text-[#F9FAFB] uppercase tracking-wider">Queue Depth Over Time</h3>
+            <p className="text-[10px] text-[#9CA3AF]">Sampled backlog depths per queue (Last 6h)</p>
+          </div>
+          <div className="h-64 text-xs">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={queueDepthChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis dataKey="time" stroke="#9CA3AF" tickLine={false} />
+                <YAxis stroke="#9CA3AF" tickLine={false} />
+                <Tooltip contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F9FAFB' }} />
+                <Legend wrapperStyle={{ paddingTop: 10 }} />
+                {uniqueQueueNames.map((name, idx) => (
+                  <Line 
+                    key={name}
+                    type="monotone"
+                    dataKey={name}
+                    name={name}
+                    stroke={LINE_COLORS[idx % LINE_COLORS.length]}
+                    strokeWidth={2}
+                    activeDot={{ r: 4 }}
+                  />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Chart 5: Percentile Latency */}
+        <div className="bg-[#1F2937] border border-[#374151] p-4 rounded">
+          <div className="mb-4">
+            <h3 className="text-xs font-semibold text-[#F9FAFB] uppercase tracking-wider">Execution Latency Percentiles</h3>
+            <p className="text-[10px] text-[#9CA3AF]">P50, P95, and P99 completed latencies (ms)</p>
+          </div>
+          <div className="h-64 text-xs">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={latencyChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis dataKey="name" stroke="#9CA3AF" tickLine={false} />
+                <YAxis stroke="#9CA3AF" tickLine={false} />
+                <Tooltip contentStyle={{ backgroundColor: '#1F2937', borderColor: '#374151', color: '#F9FAFB' }} />
+                <Bar dataKey="latency" name="Latency (ms)" fill="#3B82F6">
+                  {latencyChartData.map((entry, index) => (
+                    <Bar key={`cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>

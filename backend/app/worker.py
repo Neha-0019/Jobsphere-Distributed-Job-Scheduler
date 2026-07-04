@@ -33,6 +33,7 @@ class WorkerDaemon:
         self.poll_thread = None
         self.heartbeat_thread = None
         self.cron_thread = None
+        self.last_snapshot_time = 0
 
     def start(self):
         """Starts the worker daemon background threads."""
@@ -140,6 +141,21 @@ class WorkerDaemon:
             logger.error(f"Error during stale worker recovery: {e}")
             db.session.rollback()
 
+    def _record_queue_depth_snapshots(self):
+        """Records a snapshot of the current queue depth (QUEUED jobs) for all active queues."""
+        try:
+            from app.models import QueueDepthSnapshot
+            queues = Queue.query.all()
+            for q in queues:
+                depth = Job.query.filter_by(queue_id=q.id, status='QUEUED').count()
+                snapshot = QueueDepthSnapshot(queue_id=q.id, depth=depth, timestamp=datetime.utcnow())
+                db.session.add(snapshot)
+            db.session.commit()
+            logger.info("Recorded queue depth snapshots for active queues.")
+        except Exception as e:
+            logger.error(f"Error recording queue depth snapshots: {e}")
+            db.session.rollback()
+
     def _heartbeat_loop(self):
         """Periodic heartbeat loop."""
         while self.running:
@@ -157,6 +173,12 @@ class WorkerDaemon:
                         
                         # Also run stale worker recovery periodically from one worker
                         self._recover_stale_workers()
+                        
+                        # Record queue depth snapshots every 30 seconds
+                        now = time.time()
+                        if now - getattr(self, 'last_snapshot_time', 0) >= 30:
+                            self._record_queue_depth_snapshots()
+                            self.last_snapshot_time = now
             except Exception as e:
                 logger.error(f"Error in heartbeat loop: {e}")
 
@@ -298,6 +320,7 @@ class WorkerDaemon:
                 # Store payload and max_retries locally before committing and closing session
                 payload_str = job.payload
                 max_retries = job.max_retries
+                idempotency_key = job.idempotency_key
 
                 # Move status to RUNNING
                 job.status = 'RUNNING'
@@ -308,7 +331,8 @@ class WorkerDaemon:
                     job_id=job.id,
                     worker_id=self.worker_id,
                     status='RUNNING',
-                    started_at=datetime.utcnow()
+                    started_at=datetime.utcnow(),
+                    idempotency_key=idempotency_key
                 )
                 db.session.add(execution)
                 db.session.commit()
@@ -329,82 +353,100 @@ class WorkerDaemon:
                 logs.append((level, msg))
                 logger.info(f"Job [{job_id}] - {level}: {msg}")
 
+            # Idempotency Guard: Check if a successful execution already exists for this idempotency key.
+            # Since the database is decoupled from task run state transitions, this system guarantees
+            # at-least-once execution semantics by design. However, this guard prevents redundant
+            # duplicate executions of completed tasks if a crash occurs post-completion but pre-commit.
+            already_completed = False
+            if idempotency_key:
+                with self.app.app_context():
+                    existing_run = JobExecution.query.filter_by(
+                        idempotency_key=idempotency_key,
+                        status='COMPLETED'
+                    ).first()
+                    if existing_run:
+                        already_completed = True
+
             try:
-                append_log("INFO", f"Starting execution of Job [{job_id}]")
-                payload_data = json.loads(payload_str)
+                if already_completed:
+                    append_log("WARNING", f"Duplicate execution detected for key [{idempotency_key}]. Bypassing duplicate task run side-effects.")
+                    success = True
+                else:
+                    append_log("INFO", f"Starting execution of Job [{job_id}]")
+                    payload_data = json.loads(payload_str)
                 
-                # Execute based on job payload type
-                job_type = payload_data.get("type", "GENERIC")
-                
-                if job_type == "HTTP":
-                    url_str = payload_data.get("url")
-                    method = payload_data.get("method", "GET").upper()
-                    headers = payload_data.get("headers", {})
-                    body = payload_data.get("body", "")
-
-                    if not url_str:
-                        raise ValueError("HTTP jobs require a 'url' parameter in payload")
-
-                    append_log("INFO", f"Executing HTTP {method} webhook request to: {url_str}")
+                    # Execute based on job payload type
+                    job_type = payload_data.get("type", "GENERIC")
                     
-                    # Parse URL
-                    parsed_url = urllib.parse.urlparse(url_str)
-                    host = parsed_url.netloc
-                    path = parsed_url.path or "/"
-                    if parsed_url.query:
-                        path += "?" + parsed_url.query
+                    if job_type == "HTTP":
+                        url_str = payload_data.get("url")
+                        method = payload_data.get("method", "GET").upper()
+                        headers = payload_data.get("headers", {})
+                        body = payload_data.get("body", "")
 
-                    # Determine HTTPS vs HTTP
-                    conn = None
-                    if parsed_url.scheme == "https":
-                        conn = http.client.HTTPSConnection(host, timeout=10)
-                    else:
-                        conn = http.client.HTTPConnection(host, timeout=10)
-                    
-                    headers["User-Agent"] = "JobSphereScheduler/1.0"
-                    if body and "Content-Type" not in headers:
-                        headers["Content-Type"] = "application/json"
+                        if not url_str:
+                            raise ValueError("HTTP jobs require a 'url' parameter in payload")
+
+                        append_log("INFO", f"Executing HTTP {method} webhook request to: {url_str}")
                         
-                    conn.request(method, path, body=body, headers=headers)
-                    resp = conn.getresponse()
-                    resp_data = resp.read().decode('utf-8')
-                    
-                    append_log("INFO", f"HTTP Response Status: {resp.status}")
-                    append_log("INFO", f"HTTP Response Body Preview: {resp_data[:200]}")
-                    
-                    if resp.status >= 400:
-                        raise Exception(f"HTTP request failed with status code {resp.status}: {resp_data[:100]}")
-                    success = True
+                        # Parse URL
+                        parsed_url = urllib.parse.urlparse(url_str)
+                        host = parsed_url.netloc
+                        path = parsed_url.path or "/"
+                        if parsed_url.query:
+                            path += "?" + parsed_url.query
 
-                elif job_type == "EMAIL":
-                    to_email = payload_data.get("to")
-                    subject = payload_data.get("subject")
-                    body = payload_data.get("body")
-                    
-                    if not to_email or not subject:
-                        raise ValueError("EMAIL jobs require 'to' and 'subject' parameters in payload")
+                        # Determine HTTPS vs HTTP
+                        conn = None
+                        if parsed_url.scheme == "https":
+                            conn = http.client.HTTPSConnection(host, timeout=10)
+                        else:
+                            conn = http.client.HTTPConnection(host, timeout=10)
                         
-                    append_log("INFO", f"Sending Email mock to: {to_email}")
-                    append_log("INFO", f"Subject: {subject}")
-                    time.sleep(1.0) # Simulate network transmission delay
-                    append_log("INFO", "Email Mock transmitted successfully")
-                    success = True
+                        headers["User-Agent"] = "JobSphereScheduler/1.0"
+                        if body and "Content-Type" not in headers:
+                            headers["Content-Type"] = "application/json"
+                            
+                        conn.request(method, path, body=body, headers=headers)
+                        resp = conn.getresponse()
+                        resp_data = resp.read().decode('utf-8')
+                        
+                        append_log("INFO", f"HTTP Response Status: {resp.status}")
+                        append_log("INFO", f"HTTP Response Body Preview: {resp_data[:200]}")
+                        
+                        if resp.status >= 400:
+                            raise Exception(f"HTTP request failed with status code {resp.status}: {resp_data[:100]}")
+                        success = True
 
-                elif job_type == "COMPUTE":
-                    # Simulated heavy workload
-                    steps = payload_data.get("steps", 5)
-                    append_log("INFO", f"Running heavy compute task for {steps} cycles...")
-                    for i in range(steps):
-                        time.sleep(0.5)
-                        append_log("INFO", f"Compute cycle {i+1}/{steps} finished")
-                    success = True
+                    elif job_type == "EMAIL":
+                        to_email = payload_data.get("to")
+                        subject = payload_data.get("subject")
+                        body = payload_data.get("body")
+                        
+                        if not to_email or not subject:
+                            raise ValueError("EMAIL jobs require 'to' and 'subject' parameters in payload")
+                            
+                        append_log("INFO", f"Sending Email mock to: {to_email}")
+                        append_log("INFO", f"Subject: {subject}")
+                        time.sleep(1.0) # Simulate network transmission delay
+                        append_log("INFO", "Email Mock transmitted successfully")
+                        success = True
 
-                else: # GENERIC
-                    duration = payload_data.get("duration", 2.0)
-                    append_log("INFO", f"Generic background job sleep simulation for {duration} seconds...")
-                    time.sleep(duration)
-                    append_log("INFO", "Generic job simulation finished")
-                    success = True
+                    elif job_type == "COMPUTE":
+                        # Simulated heavy workload
+                        steps = payload_data.get("steps", 5)
+                        append_log("INFO", f"Running heavy compute task for {steps} cycles...")
+                        for i in range(steps):
+                            time.sleep(0.5)
+                            append_log("INFO", f"Compute cycle {i+1}/{steps} finished")
+                        success = True
+
+                    else: # GENERIC
+                        duration = payload_data.get("duration", 2.0)
+                        append_log("INFO", f"Generic background job sleep simulation for {duration} seconds...")
+                        time.sleep(duration)
+                        append_log("INFO", "Generic job simulation finished")
+                        success = True
 
             except Exception as e:
                 success = False
@@ -458,8 +500,13 @@ class WorkerDaemon:
                         if queue and queue.retry_policy:
                             strategy = queue.retry_policy.strategy
                             backoff = queue.retry_policy.backoff_interval
+                        from flask import current_app
+                        try:
+                            max_delay_cap = current_app.config.get('MAX_RETRY_DELAY_CAP')
+                        except Exception:
+                            max_delay_cap = None
                         
-                        next_run = calculate_next_retry(strategy, backoff, job.retry_count)
+                        next_run = calculate_next_retry(strategy, backoff, job.retry_count, max_delay_cap=max_delay_cap)
                         job.run_at = next_run
                         logger.info(f"Job [{job_id}] failed. Scheduled retry #{job.retry_count} for: {next_run}")
                     else:

@@ -148,6 +148,7 @@ class Job(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     completed_at = db.Column(db.DateTime, nullable=True)
+    idempotency_key = db.Column(db.String(100), unique=True, nullable=True, index=True)
 
     # Relationships
     queue = db.relationship('Queue', back_populates='jobs')
@@ -181,6 +182,7 @@ class Job(db.Model):
             'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None,
             'updated_at': self.updated_at.isoformat() + 'Z' if self.updated_at else None,
             'completed_at': self.completed_at.isoformat() + 'Z' if self.completed_at else None,
+            'idempotency_key': self.idempotency_key,
             'depends_on': [p.id for p in self.parents],
             'triggered_jobs': [c.id for c in self.children]
         }
@@ -253,6 +255,7 @@ class JobExecution(db.Model):
     duration_ms = db.Column(db.Integer, nullable=True)
     started_at = db.Column(db.DateTime, default=datetime.utcnow)
     finished_at = db.Column(db.DateTime, nullable=True)
+    idempotency_key = db.Column(db.String(100), nullable=True, index=True)
 
     # Relationships
     job = db.relationship('Job', back_populates='executions')
@@ -267,7 +270,8 @@ class JobExecution(db.Model):
             'error_message': self.error_message,
             'duration_ms': self.duration_ms,
             'started_at': self.started_at.isoformat() + 'Z' if self.started_at else None,
-            'finished_at': self.finished_at.isoformat() + 'Z' if self.finished_at else None
+            'finished_at': self.finished_at.isoformat() + 'Z' if self.finished_at else None,
+            'idempotency_key': self.idempotency_key
         }
 
 
@@ -311,4 +315,24 @@ class DeadLetterQueueEntry(db.Model):
             'payload': self.payload,
             'last_error': self.last_error,
             'failed_at': self.failed_at.isoformat() + 'Z' if self.failed_at else None
+        }
+
+class QueueDepthSnapshot(db.Model):
+    __tablename__ = 'queue_depth_snapshots'
+
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    queue_id = db.Column(db.String(36), db.ForeignKey('queues.id', ondelete='CASCADE'), nullable=False, index=True)
+    depth = db.Column(db.Integer, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    # Relationships
+    queue = db.relationship('Queue')
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'queue_id': self.queue_id,
+            'queue_name': self.queue.name if self.queue else None,
+            'depth': self.depth,
+            'timestamp': self.timestamp.isoformat() + 'Z' if self.timestamp else None
         }

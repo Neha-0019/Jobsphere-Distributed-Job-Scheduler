@@ -41,6 +41,9 @@ def create_app():
         try:
             db.create_all()
             print("Database tables initialized successfully.")
+            # Run dynamic column addition checks
+            from app.migrations import run_migrations
+            run_migrations(app)
         except Exception as e:
             print(f"Error initializing database tables: {e}")
 

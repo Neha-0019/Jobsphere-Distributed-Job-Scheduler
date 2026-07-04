@@ -13,7 +13,6 @@ erDiagram
     QUEUES ||--o{ QUEUE_DEPTH_SNAPSHOTS : "snapshots"
     QUEUES }o--|| RETRY_POLICIES : "references"
     JOBS ||--o{ JOB_EXECUTIONS : "logs"
-    JOBS }o--o{ JOBS : "depends_on (job_dependencies)"
     JOBS }o--|| WORKERS : "executed_by"
     JOB_EXECUTIONS ||--o{ JOB_LOGS : "emits"
     

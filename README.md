@@ -4,40 +4,11 @@
   <strong>A scalable, database-backed task coordinator with automatic retry policies, dead-letter queue routing, worker cluster heartbeat checks, and real-time dashboard telemetrics.</strong>
 </p>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11" />
-  <img src="https://img.shields.io/badge/Flask-Backend-000000?style=flat-square&logo=flask&logoColor=white" alt="Flask Backend" />
-  <img src="https://img.shields.io/badge/React-Frontend-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React Frontend" />
-  <img src="https://img.shields.io/badge/Database-PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" />
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License MIT" />
-</p>
-
 ---
 
 ## 📖 Project Overview
 
-The **Distributed Job Scheduler** is a full-stack, production-ready orchestrator designed to manage background task workloads across distributed worker clusters. Built on a clean, stateless architecture, the system coordinates task delivery from prioritized channels to active computing nodes. The project demonstrates core scheduling paradigms, including **JWT-based authentication**, **multi-tenant organizational contexts**, **pipeline project grouping**, **prioritized queue management**, **job-lifecycle transitions**, **worker capacity routing**, **retry policies**, **dead-letter routing**, and a **real-time administration dashboard** featuring live health diagnostics and CSV logs export.
-
----
-
-## ✨ Features
-
-*   🔓 **Secure Session Access:** State-backed JWT authentication with secure password encryption.
-*   🏢 **Multi-Tenant Contexts:** Organization workspaces containing isolated project environments.
-*   🚦 **Active Priority Queuing:** Prioritized routing channels with dynamic activity switches.
-*   ⚙️ **Job State Machine:** Stateful transitions (`QUEUED` ➔ `RUNNING` ➔ `SUCCESS` / `FAILED` / `RETRY` ➔ `DEAD_LETTER`).
-*   🔄 **Automatic Retry Policies:** Limit-based retries featuring configurable delays (`retry_delay_seconds`).
-*   ☣️ **Dead Letter Quarantine:** Automated capture of permanently failed jobs in a dedicated Dead Letter Queue (DLQ).
-*   ⏱️ **SRE Observability Telemetry:** Real-time tracking of queue depths and system latency percentiles ($P_{50}$, $P_{95}$, $P_{99}$) plotted on clean charts.
-*   🛡️ **Rate Limiter Guard:** Thread-safe token-bucket decorator to prevent API endpoints from spamming.
-
----
-
-## 📸 Screenshots & Showcase
-
-### 🖥️ Real-Time Telemetry Dashboard
-A premium dark-themed SRE administration console showing active worker daemons, throughput rates, latency percentiles, and live logs.
-![JobSphere Dashboard](dashboard_mockup.png)
+The **Distributed Job Scheduler** is a full-stack, production-ready orchestrator designed to manage background task workloads across distributed worker clusters. Built on a clean, database-backed architecture, the system coordinates task delivery from prioritized channels to active computing nodes. The project demonstrates core scheduling paradigms, including **JWT-based authentication**, **multi-tenant organizational contexts**, **pipeline project grouping**, **prioritized queue management**, **job-lifecycle transitions**, **worker capacity routing**, **retry policies**, **dead-letter routing**, and a **real-time administration dashboard** featuring live health diagnostics and CSV logs export.
 
 ---
 
@@ -91,150 +62,78 @@ graph TB
     WorkerNode2 -.->|Broadcast events upon execution status change| WSServer
 ```
 
+For the detailed entity relationships and key constraints, refer to the [Database ER Diagram](docs/ER_DIAGRAM.md).
+
 ---
 
-## 💾 Database Schema (ER Diagram)
+## 🛠️ Technology Stack
 
-```mermaid
-erDiagram
-    ORGANIZATIONS ||--o{ USERS : "contains"
-    ORGANIZATIONS ||--o{ PROJECTS : "has"
-    PROJECTS ||--o{ QUEUES : "defines"
-    PROJECTS ||--o{ RETRY_POLICIES : "defines"
-    QUEUES ||--o{ JOBS : "enqueues"
-    QUEUES ||--o{ RECURRING_JOBS : "registers"
-    QUEUES ||--o{ QUEUE_DEPTH_SNAPSHOTS : "snapshots"
-    QUEUES }o--|| RETRY_POLICIES : "references"
-    JOBS ||--o{ JOB_EXECUTIONS : "logs"
-    JOBS }o--|| WORKERS : "executed_by"
-    JOB_EXECUTIONS ||--o{ JOB_LOGS : "emits"
-    
-    ORGANIZATIONS {
-        string id PK
-        string name
-        datetime created_at
-    }
+<p align="left">
+  <img src="https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11" />
+  <img src="https://img.shields.io/badge/Flask-Backend-000000?style=flat-square&logo=flask&logoColor=white" alt="Flask Backend" />
+  <img src="https://img.shields.io/badge/React-Frontend-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React Frontend" />
+  <img src="https://img.shields.io/badge/Database-PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License MIT" />
+</p>
 
-    USERS {
-        string id PK
-        string email UK
-        string password_hash
-        string organization_id FK
-        datetime created_at
-        datetime updated_at
-    }
+---
 
-    PROJECTS {
-        string id PK
-        string name
-        string api_key UK
-        string organization_id FK
-        datetime created_at
-    }
+## ✨ Features
 
-    RETRY_POLICIES {
-        string id PK
-        string name
-        string strategy
-        integer backoff_interval
-        integer max_retries
-        string project_id FK
-        datetime created_at
-    }
+*   🔓 **Secure Session Access:** State-backed JWT authentication with secure password encryption.
+*   🏢 **Multi-Tenant Contexts:** Organization workspaces containing isolated project environments.
+*   🚦 **Active Priority Queuing:** Prioritized routing channels with dynamic activity switches.
+*   ⚙️ **Job State Machine:** Stateful transitions (`QUEUED` ➔ `RUNNING` ➔ `SUCCESS` / `FAILED` / `RETRY` ➔ `DEAD_LETTER`).
+*   🔄 **Automatic Retry Policies:** Limit-based retries featuring configurable delays (`retry_delay_seconds`).
+*   ☣️ **Dead Letter Quarantine:** Automated capture of permanently failed jobs in a dedicated Dead Letter Queue (DLQ).
+*   ⏱️ **SRE Observability Telemetry:** Real-time tracking of queue depths and system latency percentiles ($P_{50}$, $P_{95}$, $P_{99}$) plotted on clean charts.
+*   🛡️ **Rate Limiter Guard:** Thread-safe token-bucket decorator to prevent API endpoints from spamming.
 
-    QUEUES {
-        string id PK
-        string name
-        string project_id FK
-        integer priority
-        integer max_concurrency
-        boolean is_paused
-        string retry_policy_id FK
-        datetime created_at
-        datetime updated_at
-    }
+---
 
-    JOBS {
-        string id PK
-        string queue_id FK
-        string status
-        string payload
-        integer priority
-        datetime run_at
-        integer retry_count
-        integer max_retries
-        string last_error
-        string worker_id FK
-        string batch_id
-        datetime created_at
-        datetime updated_at
-        datetime completed_at
-        string idempotency_key UK
-    }
+## 📸 Screenshots & Showcase
 
-    RECURRING_JOBS {
-        string id PK
-        string name
-        string queue_id FK
-        string cron_expression
-        string payload
-        integer priority
-        boolean is_active
-        datetime next_run_at
-        datetime created_at
-        datetime updated_at
-    }
+### Dashboard
+A premium dark-themed SRE administration console showing active worker daemons, throughput rates, latency percentiles, and live logs.
+![Dashboard](screenshots/dashboard.png)
 
-    WORKERS {
-        string id PK
-        string name
-        string host
-        string status
-        datetime last_heartbeat
-        datetime created_at
-        datetime updated_at
-    }
+### Queue Management
+Create, edit, pause, and configure queues and custom retry policies dynamically.
+![Queues](screenshots/queues.png)
 
-    JOB_EXECUTIONS {
-        string id PK
-        string job_id FK
-        string worker_id
-        string status
-        string error_message
-        integer duration_ms
-        datetime started_at
-        datetime finished_at
-        string idempotency_key
-    }
+### Job Explorer
+Inspect execution states, batching transactions, individual attempt durations, stack traces, and job logs.
+![Jobs](screenshots/jobs.png)
 
-    JOB_LOGS {
-        string id PK
-        string execution_id FK
-        string log_level
-        string message
-        datetime timestamp
-    }
+### Worker Management
+View status, host mappings, and active worker daemon threads polling and claiming tasks.
+![Workers](screenshots/workers.png)
 
-    DEAD_LETTER_QUEUE {
-        string id PK
-        string original_job_id
-        string queue_id
-        string payload
-        string last_error
-        datetime failed_at
-    }
+### Metrics
+Detailed charts for queue throughput rates, dispatch volumes, failure rates, queue depths, and latencies.
+![Metrics Top](screenshots/metrics.png)
+![Metrics Bottom](screenshots/metrics_bottom.png)
 
-    QUEUE_DEPTH_SNAPSHOTS {
-        string id PK
-        string queue_id FK
-        integer depth
-        datetime timestamp
-    }
+---
+
+## 📂 Project Structure
+
+```text
+JobSphere/
+├── backend/                  # Flask REST API & Worker Daemon Engine
+├── frontend/                 # React Observability Dashboard (Vite)
+├── docs/                     # Detailed Architectural & SRE Specifications
+│   ├── ARCHITECTURE_DIAGRAM.md
+│   ├── ER_DIAGRAM.md
+│   ├── API_DOCUMENTATION.md
+│   └── DESIGN_DECISIONS.md
+├── screenshots/              # UI Showcase assets
+└── README.md                 # Project root portal
 ```
 
 ---
 
-## 🛠️ Setup & Running Instructions
+## 📥 Installation & Running Instructions
 
 ### Prerequisites
 *   Python 3.8+
@@ -279,8 +178,17 @@ erDiagram
     ```
 4.  Open `http://localhost:5173` in your browser.
 
-### 3. Running Automated Tests
-To run the automated test suite verifying backoff algorithms and cron schedule calculation:
+---
+
+## 🔌 API Documentation
+
+Detailed route parameters, payload schemas, and headers for all client connections are documented in the [API Documentation](docs/API_DOCUMENTATION.md).
+
+---
+
+## 🧪 Testing
+
+To run the automated test suite verifying backoff algorithms, cron schedule calculations, rates limits, and claiming operations:
 ```bash
 cd backend
 python -m unittest tests/test_scheduler.py
@@ -288,29 +196,8 @@ python -m unittest tests/test_scheduler.py
 
 ---
 
-## 🔌 API Documentation
+## 🔮 Future Improvements
 
-All request bodies must be JSON, and protected routes require the header `Authorization: Bearer <jwt-token>`.
-
-### Authentication
-*   `POST /api/auth/register` - Create account. Automatically provisions an organization and default project.
-    *   *Request:* `{ "email": "user@example.com", "password": "securepassword", "organization_name": "My Org" }`
-*   `POST /api/auth/login` - Authenticate user. Returns JWT and project details.
-
-### Queues & Policies
-*   `GET /api/queues/` - Retrieve all queues and their real-time job metrics.
-*   `POST /api/queues/` - Initialize a new queue.
-    *   *Request:* `{ "name": "email-queue", "priority": 8, "max_concurrency": 10, "retry_policy_id": "uuid" }`
-*   `PATCH /api/queues/<queue_id>` - Update configuration or pause/resume a queue.
-*   `POST /api/queues/retry-policies` - Add custom retry backoff rules.
-    *   *Request:* `{ "name": "exponential-3x", "strategy": "EXPONENTIAL", "backoff_interval": 5, "max_retries": 3 }`
-
-### Job Management
-*   `POST /api/jobs/` - Enqueue immediate or delayed job.
-    *   *Request:* `{ "queue_id": "uuid", "priority": 5, "payload": { "type": "HTTP", "url": "https://webhook.site/..." }, "delay_seconds": 30 }`
-*   `POST /api/jobs/batch` - Dispatch multiple jobs sharing a single transaction.
-*   `POST /api/jobs/recurring` - Define a recurring cron schedule.
-    *   *Request:* `{ "name": "nightly-backup", "queue_id": "uuid", "cron_expression": "0 0 * * *", "payload": { "action": "backup" } }`
-*   `GET /api/jobs/` - Fetch paginated job history. Supports filtering by `status`, `queue_id`, and `batch_id`.
-*   `GET /api/jobs/<job_id>` - Get execution attempt history, logs, and errors.
-*   `POST /api/jobs/<job_id>/retry` - Force-retry a failed job.
+*   **Distributed Rate Limiting:** Migrate the in-memory token-bucket limiter to Redis to synchronize rate constraints across load-balanced worker clusters.
+*   **Workflow DAG Orchestration:** Support task chaining and dependency graph resolution to execute jobs in strict sequential DAG steps.
+*   **Worker Auto-scaling:** Dynamically scale worker threads based on active queue depth metrics.

@@ -128,6 +128,10 @@ Inspect execution states, batching transactions, individual attempt durations, s
 View status, host mappings, and active worker daemon threads polling and claiming tasks.
 ![Workers](screenshots/workers.png)
 
+### Dead Letter Queue (DLQ)
+Inspect and manage failed tasks that have exhausted all configured retry policies.
+![Dead Letter Queue](screenshots/dlq.png)
+
 ### Metrics
 Detailed charts for queue throughput rates, dispatch volumes, failure rates, queue depths, and latencies.
 ![Metrics Top](screenshots/metrics.png)

@@ -62,17 +62,36 @@ graph TB
     WorkerNode2 -.->|Broadcast events upon execution status change| WSServer
 ```
 
-For the detailed entity relationships and key constraints, refer to the [Database ER Diagram](docs/ER_DIAGRAM.md).
+---
+
+## 💾 Database Schema (ER Diagram)
+
+```mermaid
+erDiagram
+    ORGANIZATIONS ||--o{ USERS : "contains"
+    ORGANIZATIONS ||--o{ PROJECTS : "has"
+    PROJECTS ||--o{ QUEUES : "defines"
+    PROJECTS ||--o{ RETRY_POLICIES : "defines"
+    QUEUES ||--o{ JOBS : "enqueues"
+    QUEUES ||--o{ RECURRING_JOBS : "registers"
+    QUEUES ||--o{ QUEUE_DEPTH_SNAPSHOTS : "snapshots"
+    QUEUES }o--|| RETRY_POLICIES : "references"
+    JOBS ||--o{ JOB_EXECUTIONS : "logs"
+    JOBS }o--|| WORKERS : "executed_by"
+    JOB_EXECUTIONS ||--o{ JOB_LOGS : "emits"
+```
+
+For the detailed database attributes, primary/foreign keys, and data types, refer to the [Database ER Diagram with Attributes](docs/ER_DIAGRAM.md).
 
 ---
 
 ## 🛠️ Technology Stack
 
 <p align="left">
-  <img src="https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.11" />
-  <img src="https://img.shields.io/badge/Flask-Backend-000000?style=flat-square&logo=flask&logoColor=white" alt="Flask Backend" />
-  <img src="https://img.shields.io/badge/React-Frontend-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React Frontend" />
-  <img src="https://img.shields.io/badge/Database-PostgreSQL-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL" />
+  <img src="https://img.shields.io/badge/Python-3.11-3776AB?style=flat-square" alt="Python 3.11" />
+  <img src="https://img.shields.io/badge/Flask-Backend-000000?style=flat-square" alt="Flask Backend" />
+  <img src="https://img.shields.io/badge/React-Frontend-61DAFB?style=flat-square" alt="React Frontend" />
+  <img src="https://img.shields.io/badge/Database-PostgreSQL-4169E1?style=flat-square" alt="PostgreSQL" />
   <img src="https://img.shields.io/badge/License-MIT-yellow?style=flat-square" alt="License MIT" />
 </p>
 

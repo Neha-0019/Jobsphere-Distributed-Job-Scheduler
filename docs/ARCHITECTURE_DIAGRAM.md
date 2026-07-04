@@ -4,21 +4,21 @@ This document describes the runtime components of JobSphere and their communicat
 
 ```mermaid
 graph TB
-    subgraph Client Plane
+    subgraph "Client Plane"
         ReactConsole["React Dashboard Console (Vite)"]
         BrowserSock["WebSocket Client (Browser)"]
     end
 
-    subgraph Control Plane (API Gateway)
+    subgraph "Control Plane (API Gateway)"
         FlaskAPI["Flask HTTP API Server"]
         WSServer["Flask-Sock Gateway (WebSockets)"]
     end
 
-    subgraph Data Plane
+    subgraph "Data Plane"
         PostgresDB["PostgreSQL / SQLite Database"]
     end
 
-    subgraph Execution Plane (Worker Pool)
+    subgraph "Execution Plane (Worker Pool)"
         WorkerNode1["Worker Daemon Thread Pool (Node 1)"]
         WorkerNode2["Worker Daemon Thread Pool (Node 2)"]
     end
